@@ -1,0 +1,23 @@
+[package]
+name = "casper-velocity-contracts"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+odra = { version = "1.0", features = ["casper-contract"] }
+serde = { version = "1.0", features = ["derive"] }
+
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "liquid_staking_contract"
+path = "bin/liquid_staking.rs"
+
+[[bin]]
+name = "yield_aggregator_contract"
+path = "bin/yield_aggregator.rs"
+
+[[bin]]
+name = "synthetic_stablecoin_contract"
+path = "bin/synthetic_stablecoin.rs"
