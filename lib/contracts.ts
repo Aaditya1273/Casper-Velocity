@@ -4,8 +4,9 @@
  */
 
 export const CONTRACTS = {
-  // Stylus Rust ZK Verifier (REAL Groth16 verification)
-  ZK_VERIFIER: process.env.NEXT_PUBLIC_STYLUS_VERIFIER || "0xa2d6642f1f307a8144349d6fe2188bf764a08253" as const,
+  // Stylus Rust ZK Verifier (PRODUCTION with cryptographic verification)
+  // Deployed: Feb 18, 2026 - Updated with bn256Pairing precompile integration
+  ZK_VERIFIER: process.env.NEXT_PUBLIC_STYLUS_VERIFIER || "0x9af0b5c82d56d083d1cf54425f57a7b04d6566ec" as const,
   
   // Compliance Registry (stores verified attributes)
   COMPLIANCE_REGISTRY: process.env.NEXT_PUBLIC_COMPLIANCE_REGISTRY || "0x464D37393C8D3991b493DBb57F5f3b8c31c7Fa60" as const,
