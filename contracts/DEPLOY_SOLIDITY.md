@@ -1,16 +1,42 @@
 # Deploy Solidity Contracts to Arbitrum Sepolia
 
-Quick guide to deploy the working Solidity contracts while Stylus dependencies are being resolved.
+Quick guide to deploy the real Groth16-based Solidity contracts.
 
 ## ✅ What You're Deploying
 
 1. **ComplianceRegistry** - Stores verified compliance attributes
-2. **ZKVerifier** - Wrapper for ZK proof verification
+2. **CreditScoreVerifier** - Generated Groth16 verifier (real cryptographic verification)
+3. **ZKVerifier** - Wrapper for Groth16 verification + compliance tracking
 3. **MockBUIDL** - Demo RWA token with compliance checks
 
 ## 🚀 Quick Deploy
 
-### Step 1: Set Environment Variables
+### Step 1: Generate Groth16 Verifier
+
+From the project root:
+
+```bash
+cd circuits
+bash generate_credit_score.sh
+```
+
+This generates:
+- `contracts/src/CreditScoreVerifier.sol`
+- `public/zk/credit_score/*` (frontend artifacts)
+
+### Step 2: Deploy CreditScoreVerifier
+
+Using Foundry:
+
+```bash
+forge create --rpc-url $ARBITRUM_SEPOLIA_RPC \
+  --private-key $PRIVATE_KEY \
+  contracts/src/CreditScoreVerifier.sol:Verifier
+```
+
+Copy the deployed address (this is your `GROTH16_VERIFIER`).
+
+### Step 3: Set Environment Variables
 
 Create `.env` in the `contracts` directory:
 
@@ -18,9 +44,10 @@ Create `.env` in the `contracts` directory:
 PRIVATE_KEY=your_private_key_without_0x
 ARBITRUM_SEPOLIA_RPC=https://sepolia-rollup.arbitrum.io/rpc
 ARBISCAN_API_KEY=your_arbiscan_api_key (optional, for verification)
+GROTH16_VERIFIER=0xYourDeployedVerifier
 ```
 
-### Step 2: Deploy
+### Step 4: Deploy
 
 ```bash
 cd contracts
@@ -39,7 +66,7 @@ forge script script/Deploy.s.sol \
   --broadcast
 ```
 
-### Step 3: Update Frontend
+### Step 5: Update Frontend
 
 Copy the deployed addresses from the output and update `lib/contracts.ts`:
 
@@ -55,19 +82,14 @@ export const CONTRACTS = {
 ## 📊 What You Get
 
 - ✅ Fully functional compliance system
-- ✅ ZK proof verification (Solidity implementation)
+- ✅ Real ZK proof verification (Groth16 Solidity verifier)
 - ✅ Compliance registry with expiration
 - ✅ Mock RWA token integration
 - ✅ Ready for frontend integration
 
 ## 🔄 Stylus Upgrade Path
 
-Later, when Stylus dependencies are resolved:
-1. Deploy Stylus Rust verifier
-2. Call `zkVerifier.updateStylusVerifier(newAddress)`
-3. Enjoy 92% gas savings!
-
-The architecture supports hot-swapping the verifier without redeploying everything.
+You can later swap to a Stylus verifier if desired, but the Groth16 Solidity verifier is fully real and functional.
 
 ## 🧪 Test Deployment
 
@@ -79,8 +101,8 @@ forge test --fork-url $ARBITRUM_SEPOLIA_RPC
 
 ## 📝 Notes
 
-- The ZKVerifier uses a placeholder Stylus address initially
-- You can update it later with `updateStylusVerifier()`
+- The ZKVerifier expects a valid Groth16 verifier address at deployment
+- You can update it later with `updateGroth16Verifier()`
 - All contracts are upgradeable through the owner/admin roles
 - Compliance records have expiration timestamps
 

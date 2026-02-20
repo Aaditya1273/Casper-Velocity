@@ -69,9 +69,26 @@ contract MockBUIDL is ERC20, Ownable {
     }
 
     /**
-     * @notice Mint tokens (only owner)
+     * @notice Mint tokens (only owner can mint to others)
      */
     function mint(address to, uint256 amount) external onlyOwner {
         _mint(to, amount);
+    }
+
+    /**
+     * @notice Mint tokens to self (requires compliance)
+     * @dev Allows compliant users to mint tokens for demo purposes
+     */
+    function mint(uint256 amount) external {
+        require(isCompliant(msg.sender), "User not compliant");
+        _mint(msg.sender, amount);
+    }
+
+    /**
+     * @notice Burn tokens from self
+     * @dev Simulates redemption
+     */
+    function burn(uint256 amount) external {
+        _burn(msg.sender, amount);
     }
 }

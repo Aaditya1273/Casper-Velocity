@@ -47,6 +47,21 @@ This will:
   - build/circuit_0000.zkey (proving key)
 ```
 
+### Credit Score Circuit (Recommended)
+
+To generate a **real** credit score proof circuit (used by the frontend):
+
+```bash
+cd circuits
+bash generate_credit_score.sh
+```
+
+This will:
+1. Compile `credit_score.circom`
+2. Generate proving + verification keys
+3. Export a Solidity verifier to `contracts/src/CreditScoreVerifier.sol`
+4. Copy artifacts to `public/zk/credit_score` for the frontend
+
 ### Step 2: Extract Verification Key to Rust
 
 Extract the verification key constants for the Stylus contract:

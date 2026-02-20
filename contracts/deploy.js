@@ -4,14 +4,24 @@ const fs = require('fs');
 const path = require('path');
 
 // Configuration
-const PRIVATE_KEY = '0xaba99cc3922a2229d169325437e68753864685026a900fd753b27735fd9839df';
-const RPC_URL = 'https://sepolia-rollup.arbitrum.io/rpc';
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const RPC_URL = process.env.RPC_URL || 'https://sepolia-rollup.arbitrum.io/rpc';
+const GROTH16_VERIFIER = process.env.GROTH16_VERIFIER;
 
 // Contract ABIs and Bytecode (we'll read from compiled files)
 async function deploy() {
     console.log('🚀 Starting deployment to Arbitrum Sepolia...\n');
 
     // Setup provider and wallet
+    if (!PRIVATE_KEY) {
+        console.error('❌ Missing PRIVATE_KEY env var');
+        process.exit(1);
+    }
+    if (!GROTH16_VERIFIER) {
+        console.error('❌ Missing GROTH16_VERIFIER env var (address of generated verifier)');
+        process.exit(1);
+    }
+
     const provider = new ethers.JsonRpcProvider(RPC_URL);
     const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
     
@@ -40,7 +50,6 @@ async function deploy() {
 
         // 1. Deploy ZKVerifier
         console.log('📝 Deploying ZKVerifier...');
-        const stylusVerifierAddress = '0xa2d6642f1f307a8144349d6fe2188bf764a08253';
         
         const ZKVerifierFactory = new ethers.ContractFactory(
             zkVerifierArtifact.abi,
@@ -48,7 +57,7 @@ async function deploy() {
             wallet
         );
         
-        const zkVerifier = await ZKVerifierFactory.deploy(stylusVerifierAddress);
+        const zkVerifier = await ZKVerifierFactory.deploy(GROTH16_VERIFIER);
         await zkVerifier.waitForDeployment();
         const zkVerifierAddress = await zkVerifier.getAddress();
         console.log('✅ ZKVerifier deployed at:', zkVerifierAddress);
@@ -109,7 +118,7 @@ async function deploy() {
         console.log('ComplianceRegistry: ', registryAddress);
         console.log('MockBUIDL:          ', buidlAddress);
         console.log('PasskeyRegistry:    ', passkeyRegistryAddress);
-        console.log('StylusVerifier:     ', stylusVerifierAddress);
+        console.log('Groth16Verifier:    ', GROTH16_VERIFIER);
         console.log('\nNetwork: Arbitrum Sepolia (Chain ID: 421614)');
         console.log('Explorer: https://sepolia.arbiscan.io/');
         console.log('\nView contracts:');
@@ -117,7 +126,7 @@ async function deploy() {
         console.log('- ComplianceRegistry:  https://sepolia.arbiscan.io/address/' + registryAddress);
         console.log('- MockBUIDL:           https://sepolia.arbiscan.io/address/' + buidlAddress);
         console.log('- PasskeyRegistry:     https://sepolia.arbiscan.io/address/' + passkeyRegistryAddress);
-        console.log('- StylusVerifier:      https://sepolia.arbiscan.io/address/' + stylusVerifierAddress);
+        console.log('- Groth16Verifier:     https://sepolia.arbiscan.io/address/' + GROTH16_VERIFIER);
         console.log('\n📝 Next steps:');
         console.log('1. Update lib/contracts.ts with these addresses');
         console.log('2. Test the frontend!');
@@ -132,7 +141,7 @@ async function deploy() {
                 ComplianceRegistry: registryAddress,
                 MockBUIDL: buidlAddress,
                 PasskeyRegistry: passkeyRegistryAddress,
-                StylusVerifier: stylusVerifierAddress
+                Groth16Verifier: GROTH16_VERIFIER
             },
             deployer: wallet.address,
             timestamp: new Date().toISOString()

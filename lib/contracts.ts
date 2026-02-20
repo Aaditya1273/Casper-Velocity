@@ -3,22 +3,27 @@
  * Deployed and verified contracts on Arbitrum Sepolia
  */
 
+import { env } from "@/env";
+
 export const CONTRACTS = {
-  // Stylus Rust ZK Verifier (PRODUCTION with cryptographic verification)
-  // Deployed: Feb 18, 2026 - Updated with bn256Pairing precompile integration
-  ZK_VERIFIER: process.env.NEXT_PUBLIC_STYLUS_VERIFIER || "0x9af0b5c82d56d083d1cf54425f57a7b04d6566ec" as const,
-  
+  // ZK Verifier (Groth16 wrapper with real verification)
+  // Deployed: Feb 19, 2026 - Requires generated Groth16 verifier contract address
+  ZK_VERIFIER: (env.NEXT_PUBLIC_ZK_VERIFIER || process.env.NEXT_PUBLIC_STYLUS_VERIFIER || "0x68B54E13F3da4A3dF34Af657853769ea6D66b6d9") as `0x${string}`,
+
+  // Groth16 verifier contract (generated from credit_score circuit)
+  GROTH16_VERIFIER: (env.NEXT_PUBLIC_GROTH16_VERIFIER || "0x46dcF690A82BbbA1D1f6fDb67EC45a2Fa7A17404") as `0x${string}`,
+
   // Compliance Registry (stores verified attributes)
-  COMPLIANCE_REGISTRY: process.env.NEXT_PUBLIC_COMPLIANCE_REGISTRY || "0x464D37393C8D3991b493DBb57F5f3b8c31c7Fa60" as const,
-  
-  // Mock RWA Token (for demo BUIDL portal)
-  MOCK_BUIDL: process.env.NEXT_PUBLIC_MOCK_BUIDL || "0x15Ef1E2E5899dBc374e5D7e147d57Fd032912eDC" as const,
-  
+  COMPLIANCE_REGISTRY: (process.env.NEXT_PUBLIC_COMPLIANCE_REGISTRY || "0xD39184bd636D5f18604e696C149DdAF770023BEA") as `0x${string}`,
+
+  // Mock RWA Token (for demo BUIDL portal) - Updated with mint/burn for users
+  MOCK_BUIDL: (process.env.NEXT_PUBLIC_MOCK_BUIDL || "0x444709c368e2DfeAD2B91C74f81D59Ca897120a4") as `0x${string}`,
+
   // Passkey Registry (multi-device passkey management)
-  PASSKEY_REGISTRY: process.env.NEXT_PUBLIC_PASSKEY_REGISTRY || "0xe047C063A0ed4ec577fa255De3456856e4455087" as const,
-  
+  PASSKEY_REGISTRY: (process.env.NEXT_PUBLIC_PASSKEY_REGISTRY || "0x8eD61DE37E6246a1aFDaa7fD7bFd8DA2414E4a29") as `0x${string}`,
+
   // Passkey Verifier (RIP-7212 precompile)
-  PASSKEY_VERIFIER: "0x0000000000000000000000000000000000000100" as const, // RIP-7212 address
+  PASSKEY_VERIFIER: "0x0000000000000000000000000000000000000100" as `0x${string}`,
 } as const;
 
 /**
@@ -35,14 +40,32 @@ export const COMPLIANCE_ATTRIBUTES = {
 /**
  * Arbitrum Sepolia Chain Configuration for Wagmi/Viem
  */
+const PUBLIC_ARBITRUM_SEPOLIA_RPCS = [
+  "https://arb-sepolia.g.alchemy.com/v2/demo",
+  "https://arbitrum-sepolia-rpc.publicnode.com",
+  "https://sepolia-rollup.arbitrum.io/rpc",
+];
+
+const alchemyRpcUrl = env.NEXT_PUBLIC_ALCHEMY_API_KEY
+  ? `https://arb-sepolia.g.alchemy.com/v2/${env.NEXT_PUBLIC_ALCHEMY_API_KEY}`
+  : undefined;
+
 export const ARBITRUM_SEPOLIA = {
   id: 421614,
   name: "Arbitrum Sepolia",
   network: "arbitrum-sepolia",
   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
   rpcUrls: {
-    default: { http: ["https://sepolia-rollup.arbitrum.io/rpc"] },
-    public: { http: ["https://sepolia-rollup.arbitrum.io/rpc"] },
+    default: { 
+      http: alchemyRpcUrl
+        ? [alchemyRpcUrl, ...PUBLIC_ARBITRUM_SEPOLIA_RPCS]
+        : PUBLIC_ARBITRUM_SEPOLIA_RPCS
+    },
+    public: { 
+      http: alchemyRpcUrl
+        ? [alchemyRpcUrl, ...PUBLIC_ARBITRUM_SEPOLIA_RPCS]
+        : PUBLIC_ARBITRUM_SEPOLIA_RPCS
+    },
   },
   blockExplorers: {
     default: {

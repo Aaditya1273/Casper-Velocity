@@ -2,37 +2,15 @@
  * Hook to fetch real compliance data from blockchain
  */
 
-import { useAccount, useReadContract, useWatchContractEvent } from 'wagmi';
-import { useEffect, useState } from 'react';
-import { CONTRACTS } from '@/lib/contracts';
+import { useAccount, usePublicClient } from 'wagmi';
+import { useEffect, useMemo, useState } from 'react';
+import { COMPLIANCE_ATTRIBUTES, CONTRACTS } from '@/lib/contracts';
+import { parseAbi, parseAbiItem } from 'viem';
 
-// ComplianceRegistry ABI (minimal for reading)
-const COMPLIANCE_REGISTRY_ABI = [
-  {
-    inputs: [{ name: 'user', type: 'address' }, { name: 'attributeType', type: 'string' }],
-    name: 'isCompliant',
-    outputs: [{ name: '', type: 'bool' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'user', type: 'address' }],
-    name: 'getUserAttributes',
-    outputs: [{ name: '', type: 'string[]' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    anonymous: false,
-    inputs: [
-      { indexed: true, name: 'user', type: 'address' },
-      { indexed: false, name: 'attributeType', type: 'string' },
-      { indexed: false, name: 'timestamp', type: 'uint256' },
-    ],
-    name: 'ComplianceVerified',
-    type: 'event',
-  },
-] as const;
+const ZK_VERIFIER_ABI = parseAbi([
+  'function isCompliant(address user, string attributeType) view returns (bool)',
+  'event ProofVerified(address indexed user, string attributeType, bytes32 proofHash, uint256 gasUsed)',
+]);
 
 export interface VerifiedAttribute {
   attributeType: string;
@@ -45,51 +23,97 @@ export function useComplianceData() {
   const { address } = useAccount();
   const [verifiedAttributes, setVerifiedAttributes] = useState<VerifiedAttribute[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Fetch user's verified attributes
-  const { data: attributes, refetch } = useReadContract({
-    address: CONTRACTS.COMPLIANCE_REGISTRY,
-    abi: COMPLIANCE_REGISTRY_ABI,
-    functionName: 'getUserAttributes',
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!address,
-    },
-  });
-
-  // Watch for new verifications
-  useWatchContractEvent({
-    address: CONTRACTS.COMPLIANCE_REGISTRY,
-    abi: COMPLIANCE_REGISTRY_ABI,
-    eventName: 'ComplianceVerified',
-    onLogs(logs) {
-      console.log('New compliance verification:', logs);
-      refetch();
-    },
-  });
+  const publicClient = usePublicClient();
+  const attributeList = useMemo(() => Object.values(COMPLIANCE_ATTRIBUTES), []);
 
   useEffect(() => {
-    if (attributes && address) {
-      // In a real implementation, you would fetch event logs to get timestamps and tx hashes
-      // For now, we'll create a structure from the attributes
-      const attrs = (attributes as string[]).map((attr, index) => ({
-        attributeType: attr,
-        timestamp: Date.now() - index * 86400000, // Mock: 1 day apart
-        txHash: `0x${Math.random().toString(16).slice(2)}`,
-        blockNumber: 0,
-      }));
-      setVerifiedAttributes(attrs);
-      setLoading(false);
-    } else if (!address) {
+    if (!address || !publicClient) {
       setVerifiedAttributes([]);
       setLoading(false);
+      return;
     }
-  }, [attributes, address]);
+
+    let isMounted = true;
+
+    const fetchCompliance = async () => {
+      try {
+        setLoading(true);
+
+        // Get current block and lookback range
+        const currentBlock = await publicClient.getBlockNumber();
+        const fromBlock = currentBlock > BigInt(1000) ? currentBlock - BigInt(1000) : BigInt(0);
+
+        const logs = await publicClient.getLogs({
+          address: CONTRACTS.ZK_VERIFIER,
+          event: parseAbiItem('event ProofVerified(address indexed user, string attributeType, bytes32 proofHash, uint256 gasUsed)'),
+          args: { user: address },
+          fromBlock,
+          toBlock: 'latest',
+        });
+
+        const latestByAttribute = new Map<string, { txHash: string; blockNumber: bigint; timestamp: number }>();
+
+        for (const log of logs) {
+          const attr = log.args.attributeType as string;
+          const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
+          latestByAttribute.set(attr, {
+            txHash: log.transactionHash,
+            blockNumber: log.blockNumber,
+            timestamp: Number(block.timestamp),
+          });
+        }
+
+        const complianceResults = await Promise.all(
+          attributeList.map(async (attributeType) => {
+            const isCompliant = await publicClient.readContract({
+              address: CONTRACTS.ZK_VERIFIER,
+              abi: ZK_VERIFIER_ABI,
+              functionName: 'isCompliant',
+              args: [address, attributeType],
+            });
+
+            return {
+              attributeType,
+              isCompliant: isCompliant as boolean,
+              latest: latestByAttribute.get(attributeType),
+            };
+          })
+        );
+
+        const verified = complianceResults
+          .filter((result) => result.isCompliant)
+          .map((result) => ({
+            attributeType: result.attributeType,
+            timestamp: result.latest?.timestamp ?? Date.now(),
+            txHash: result.latest?.txHash ?? `0x${Math.random().toString(16).slice(2)}`,
+            blockNumber: Number(result.latest?.blockNumber ?? 0n),
+          }));
+
+        if (isMounted) {
+          setVerifiedAttributes(verified);
+        }
+      } catch (error) {
+        console.error('Failed to fetch compliance data:', error);
+        if (isMounted) {
+          setVerifiedAttributes([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchCompliance();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [address, publicClient, attributeList]);
 
   return {
     verifiedAttributes,
     loading,
-    refetch,
   };
 }
 
@@ -98,19 +122,49 @@ export function useComplianceData() {
  */
 export function useIsCompliant(attributeType: string) {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const [isCompliant, setIsCompliant] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: isCompliant, isLoading } = useReadContract({
-    address: CONTRACTS.COMPLIANCE_REGISTRY,
-    abi: COMPLIANCE_REGISTRY_ABI,
-    functionName: 'isCompliant',
-    args: address && attributeType ? [address, attributeType] : undefined,
-    query: {
-      enabled: !!address && !!attributeType,
-    },
-  });
+  useEffect(() => {
+    if (!address || !attributeType || !publicClient) {
+      setIsCompliant(false);
+      setIsLoading(false);
+      return;
+    }
 
-  return {
-    isCompliant: isCompliant as boolean,
-    isLoading,
-  };
+    let isMounted = true;
+
+    const fetchCompliance = async () => {
+      try {
+        setIsLoading(true);
+        const result = await publicClient.readContract({
+          address: CONTRACTS.ZK_VERIFIER,
+          abi: ZK_VERIFIER_ABI,
+          functionName: 'isCompliant',
+          args: [address, attributeType],
+        });
+        if (isMounted) {
+          setIsCompliant(result as boolean);
+        }
+      } catch (error) {
+        console.error('Failed to fetch compliance status:', error);
+        if (isMounted) {
+          setIsCompliant(false);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchCompliance();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [address, attributeType, publicClient]);
+
+  return { isCompliant, isLoading };
 }

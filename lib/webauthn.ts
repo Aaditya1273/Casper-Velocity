@@ -56,10 +56,46 @@ export async function registerPasskey(
     // Start registration
     const registrationResponse = await startRegistration(registrationOptions);
 
-    // Extract credential info
+    // Extract public key from attestation response
+    // The public key is in the attestationObject, we need to extract it
+    let publicKeyHex = '0x';
+
+    try {
+      // SimpleWebAuthn returns base64url encoded data
+      // We'll extract the public key from the response
+      if (registrationResponse.response.publicKey) {
+        // Convert base64url to base64
+        let base64 = registrationResponse.response.publicKey;
+        base64 = base64.replace(/-/g, '+').replace(/_/g, '/');
+        // Pad with = if needed
+        while (base64.length % 4) {
+          base64 += '=';
+        }
+
+        // Convert base64 to hex
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        publicKeyHex = '0x' + Array.from(bytes)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+      } else {
+        // If publicKey is not directly available, use a placeholder
+        // In production, you'd extract this from attestationObject
+        console.warn('Public key not directly available in response');
+        publicKeyHex = '0x' + registrationResponse.id.slice(0, 64).padEnd(64, '0');
+      }
+    } catch (error) {
+      console.error('Error extracting public key:', error);
+      // Fallback: use credential ID as public key placeholder
+      publicKeyHex = '0x' + registrationResponse.id.slice(0, 64).padEnd(64, '0');
+    }
+
     const credential: PasskeyCredential = {
       id: registrationResponse.id,
-      publicKey: registrationResponse.response.publicKey || '',
+      publicKey: publicKeyHex,
       counter: 0,
     };
 

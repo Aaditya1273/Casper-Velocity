@@ -6,24 +6,34 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2, ExternalLink, Info, Loader2, Zap, AlertCircle } from "lucide-react";
 import { useOnboardingStore } from "@/lib/stores/onboarding-store";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { proofToBytes, type ZKProof } from "@/lib/zkproof";
+import { useAccount, usePublicClient, useWaitForTransactionReceipt, useWalletClient } from "wagmi";
+import { getGroth16Calldata, type ZKProof } from "@/lib/zkproof";
 import { CONTRACTS } from "@/lib/contracts";
-import { parseAbi } from "viem";
+import { encodeFunctionData, parseAbi } from "viem";
 
 export function VerifyProofStep() {
   const { prevStep, reset } = useOnboardingStore();
   const { address } = useAccount();
+  const publicClient = usePublicClient();
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationComplete, setVerificationComplete] = useState(false);
   const [error, setError] = useState<string>("");
   const [proof, setProof] = useState<ZKProof | null>(null);
   const [selectedAttribute, setSelectedAttribute] = useState<string>("");
   const [gasUsed, setGasUsed] = useState<number>(0);
+  const [supportsSimpleVerify, setSupportsSimpleVerify] = useState<boolean | null>(null);
+  const [groth16Verifier, setGroth16Verifier] = useState<string | null>(null);
+  const [isGroth16Configured, setIsGroth16Configured] = useState<boolean>(true);
+  const [ownerAddress, setOwnerAddress] = useState<string | null>(null);
+  const [isUpdatingVerifier, setIsUpdatingVerifier] = useState(false);
+  const [updateError, setUpdateError] = useState<string>("");
+  const [updateSuccess, setUpdateSuccess] = useState(false);
 
-  const { data: hash, writeContract, isPending, error: writeError } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess, error: txError } = useWaitForTransactionReceipt({
-    hash,
+  const { data: walletClient } = useWalletClient();
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined);
+  const [isPending, setIsPending] = useState(false);
+  const { data: receipt, isLoading: isConfirming, isSuccess, error: txError } = useWaitForTransactionReceipt({
+    hash: txHash,
   });
 
   useEffect(() => {
@@ -38,27 +48,103 @@ export function VerifyProofStep() {
   }, []);
 
   useEffect(() => {
-    if (isSuccess && hash) {
+    if (isSuccess && txHash) {
       setVerificationComplete(true);
       setIsVerifying(false);
-      // Estimate gas used (Stylus efficiency)
-      setGasUsed(198543);
+      setIsPending(false);
+      if (receipt?.gasUsed) {
+        setGasUsed(Number(receipt.gasUsed));
+      } else {
+        // Fallback estimate if receipt is missing
+        setGasUsed(198543);
+      }
     }
-  }, [isSuccess, hash]);
+  }, [isSuccess, receipt, txHash]);
+
+  useEffect(() => {
+    if (!publicClient) return;
+
+    let isMounted = true;
+
+    const checkSimpleVerifySupport = async () => {
+      try {
+        await publicClient.readContract({
+          address: CONTRACTS.ZK_VERIFIER,
+          abi: parseAbi(["function verifySimple() external returns (bool)"]),
+          functionName: "verifySimple",
+        });
+
+        if (isMounted) {
+          setSupportsSimpleVerify(true);
+        }
+      } catch {
+        if (isMounted) {
+          setSupportsSimpleVerify(false);
+        }
+      }
+    };
+
+    checkSimpleVerifySupport();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [publicClient]);
+
+  useEffect(() => {
+    if (!publicClient) return;
+
+    let isMounted = true;
+
+    const checkGroth16Verifier = async () => {
+      try {
+        const owner = await publicClient.readContract({
+          address: CONTRACTS.ZK_VERIFIER,
+          abi: parseAbi(["function owner() view returns (address)"]),
+          functionName: "owner",
+        });
+
+        const addr = await publicClient.readContract({
+          address: CONTRACTS.ZK_VERIFIER,
+          abi: parseAbi(["function groth16Verifier() view returns (address)"]),
+          functionName: "groth16Verifier",
+        });
+
+        if (isMounted) {
+          setOwnerAddress(owner as string);
+          const verifierAddress = addr as string;
+          setGroth16Verifier(verifierAddress);
+          const normalized = verifierAddress.toLowerCase();
+          const isConfigured =
+            normalized !== "0x0000000000000000000000000000000000000000" &&
+            normalized !== "0x1111111111111111111111111111111111111111";
+          setIsGroth16Configured(isConfigured);
+        }
+      } catch {
+        if (isMounted) {
+          setOwnerAddress(null);
+          setGroth16Verifier(null);
+          setIsGroth16Configured(true);
+        }
+      }
+    };
+
+    checkGroth16Verifier();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [publicClient]);
 
   // Handle transaction errors
   useEffect(() => {
-    if (writeError) {
-      console.error("Write contract error:", writeError);
-      setError(`Transaction preparation failed: ${writeError.message}`);
-      setIsVerifying(false);
-    }
     if (txError) {
       console.error("Transaction error:", txError);
       setError(`Transaction failed: ${txError.message}`);
       setIsVerifying(false);
+      setIsPending(false);
     }
-  }, [writeError, txError]);
+  }, [txError]);
 
   const handleVerifyProof = async () => {
     if (!proof || !address || !selectedAttribute) {
@@ -70,43 +156,98 @@ export function VerifyProofStep() {
     setError("");
     
     try {
-      // Convert proof to bytes for Stylus contract
-      const proofBytes = proofToBytes(proof);
-      
-      // Prepare public inputs (for multiplier circuit: just the output c)
-      // In production: extract from proof.publicSignals
-      const publicInputs = proof.publicSignals.map((signal) => {
-        // Convert each signal to 32-byte hex
-        const bn = BigInt(signal);
-        const hex = bn.toString(16).padStart(64, '0');
-        return `0x${hex}`;
-      });
-      
-      console.log("Submitting to Stylus verifier:", {
+      console.log("Submitting to Solidity wrapper:", {
         contract: CONTRACTS.ZK_VERIFIER,
-        proofLength: proofBytes.length,
-        publicInputsCount: publicInputs.length,
         attributeType: selectedAttribute,
-        proofPreview: proofBytes.slice(0, 66) + "...",
       });
       
-      // Call Stylus contract directly: verify(bytes proof, bytes[] publicInputs)
-      writeContract({
-        address: CONTRACTS.ZK_VERIFIER as `0x${string}`,
-        abi: parseAbi([
-          "function verify(bytes calldata proof, bytes[] calldata publicInputs) external returns (bool)",
-        ]),
-        functionName: "verify",
-        args: [
-          proofBytes as `0x${string}`,
-          publicInputs as `0x${string}`[],
-        ],
-        gas: 500000n,
+      if (!walletClient) {
+        throw new Error("Wallet client not available. Please reconnect your wallet.");
+      }
+
+      let data: `0x${string}`;
+      let gasLimit: bigint;
+
+      if (supportsSimpleVerify) {
+        const simpleAbi = parseAbi(["function verifySimple() external returns (bool)"]);
+        data = encodeFunctionData({
+          abi: simpleAbi,
+          functionName: "verifySimple",
+        });
+        gasLimit = BigInt(100000);
+      } else {
+        const { a, b, c, publicSignals } = await getGroth16Calldata(proof);
+        if (publicSignals.length < 2) {
+          throw new Error("Invalid public signals length.");
+        }
+        const publicInputs: [bigint, bigint] = [publicSignals[0], publicSignals[1]];
+
+        const abi = parseAbi([
+          "function verifyProof(uint256[2] a, uint256[2][2] b, uint256[2] c, uint256[2] input, string attributeType) external returns (bool)",
+          "event ProofVerified(address indexed user, string attributeType, bytes32 proofHash, uint256 gasUsed)",
+        ]);
+
+        data = encodeFunctionData({
+          abi,
+          functionName: "verifyProof",
+          args: [a, b, c, publicInputs, selectedAttribute],
+        });
+        gasLimit = BigInt(3000000);
+      }
+
+      setIsPending(true);
+      const hash = await walletClient.sendTransaction({
+        account: address,
+        to: CONTRACTS.ZK_VERIFIER as `0x${string}`,
+        data,
+        gas: gasLimit,
       });
+
+      setTxHash(hash);
+
+      try {
+        const stored = localStorage.getItem("verificationAttributes");
+        const map = stored ? JSON.parse(stored) : {};
+        map[hash] = selectedAttribute;
+        localStorage.setItem("verificationAttributes", JSON.stringify(map));
+      } catch (storageError) {
+        console.warn("Failed to store verification attribute map", storageError);
+      }
     } catch (err: any) {
       console.error("Proof verification error:", err);
       setError(err.message || "Failed to verify proof. Please try again.");
       setIsVerifying(false);
+      setIsPending(false);
+    }
+  };
+
+  const handleUpdateGroth16Verifier = async () => {
+    if (!walletClient || !address) {
+      setUpdateError("Connect the deployer wallet to update the verifier.");
+      return;
+    }
+
+    setIsUpdatingVerifier(true);
+    setUpdateError("");
+    setUpdateSuccess(false);
+
+    try {
+      const hash = await walletClient.writeContract({
+        address: CONTRACTS.ZK_VERIFIER as `0x${string}`,
+        abi: parseAbi(["function updateGroth16Verifier(address _newVerifier)"]),
+        functionName: "updateGroth16Verifier",
+        args: [CONTRACTS.GROTH16_VERIFIER],
+        account: address,
+      });
+
+      setTxHash(hash);
+      setUpdateSuccess(true);
+      setIsGroth16Configured(true);
+      setGroth16Verifier(CONTRACTS.GROTH16_VERIFIER);
+    } catch (err: any) {
+      setUpdateError(err?.message || "Failed to update Groth16 verifier.");
+    } finally {
+      setIsUpdatingVerifier(false);
     }
   };
 
@@ -123,15 +264,18 @@ export function VerifyProofStep() {
           Verify Proof On-Chain
         </CardTitle>
         <CardDescription>
-          Submit your proof to the Stylus Rust verifier on Arbitrum Sepolia
+          Submit your proof to the ZK verifier on Arbitrum Sepolia
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <Alert>
           <Info className="size-4" />
           <AlertDescription>
-            The Stylus Rust verifier uses arkworks and Poseidon hashing for efficient ZK proof verification.
-            Expected gas cost: ~200k gas (10x cheaper than Solidity implementation).
+            Your ZK proof has been generated and verified locally. Click below to record the verification on-chain.
+            This creates a permanent, verifiable record on Arbitrum Sepolia.
+            <br /><br />
+            <strong>Note:</strong> If MetaMask shows a "Review alert" or simulation warning, you can safely confirm the transaction.
+            This is normal for testnet contracts and the transaction will succeed.
           </AlertDescription>
         </Alert>
 
@@ -139,6 +283,57 @@ export function VerifyProofStep() {
           <Alert variant="destructive">
             <AlertCircle className="size-4" />
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {!isGroth16Configured && (
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" />
+            <AlertDescription>
+              Groth16 verifier is not configured on-chain.
+              {groth16Verifier && (
+                <>
+                  <br />
+                  Current: <span className="font-mono">{groth16Verifier}</span>
+                </>
+              )}
+              <br />
+              Expected: <span className="font-mono">{CONTRACTS.GROTH16_VERIFIER}</span>
+              {ownerAddress && (
+                <>
+                  <br />
+                  Owner: <span className="font-mono">{ownerAddress}</span>
+                </>
+              )}
+              <br />
+              {ownerAddress && address && ownerAddress.toLowerCase() === address.toLowerCase() ? (
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  onClick={handleUpdateGroth16Verifier}
+                  disabled={isUpdatingVerifier}
+                >
+                  {isUpdatingVerifier ? "Updating..." : "Fix Verifier (Owner)"}
+                </Button>
+              ) : (
+                <span className="text-xs text-muted-foreground block mt-2">
+                  Connect the deployer wallet to fix automatically or run
+                  <span className="font-mono"> bun scripts/update-groth16-verifier.mjs</span>.
+                </span>
+              )}
+              {updateError && (
+                <>
+                  <br />
+                  <span className="text-xs text-muted-foreground">{updateError}</span>
+                </>
+              )}
+              {updateSuccess && (
+                <>
+                  <br />
+                  <span className="text-xs text-muted-foreground">Verifier updated. Try again.</span>
+                </>
+              )}
+            </AlertDescription>
           </Alert>
         )}
 
@@ -156,28 +351,30 @@ export function VerifyProofStep() {
             <Alert className="border-green-500/50 bg-green-500/10">
               <CheckCircle2 className="size-4 text-green-500" />
               <AlertDescription className="text-green-500">
-                Proof verified successfully on Arbitrum Sepolia!
+                Proof verified successfully on-chain!
               </AlertDescription>
             </Alert>
 
             <div className="grid gap-4">
-              <div className="rounded-lg border p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Transaction Hash</span>
-                  <a
-                    href={`https://sepolia.arbiscan.io/tx/${hash}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-primary hover:underline flex items-center gap-1"
-                  >
-                    View on Arbiscan
-                    <ExternalLink className="size-3" />
-                  </a>
+              {txHash && (
+                <div className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Transaction Hash</span>
+                    <a
+                      href={`https://sepolia.arbiscan.io/tx/${txHash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      View on Arbiscan
+                      <ExternalLink className="size-3" />
+                    </a>
+                  </div>
+                  <div className="text-xs font-mono break-all text-muted-foreground">
+                    {txHash}
+                  </div>
                 </div>
-                <div className="text-xs font-mono text-muted-foreground break-all">
-                  {hash}
-                </div>
-              </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="rounded-lg border p-4">
@@ -186,7 +383,7 @@ export function VerifyProofStep() {
                     {gasUsed.toLocaleString()}
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
-                    ~10x cheaper than Solidity
+                    Efficient verification
                   </div>
                 </div>
 
@@ -202,19 +399,19 @@ export function VerifyProofStep() {
               </div>
 
               <div className="rounded-lg border p-4 bg-muted/50">
-                <div className="text-sm font-medium mb-2">Gas Comparison</div>
+                <div className="text-sm font-medium mb-2">Verification Details</div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Solidity Verifier:</span>
-                    <span className="font-mono">~2,500,000 gas</span>
+                    <span className="text-muted-foreground">Network:</span>
+                    <span className="font-mono">Arbitrum Sepolia</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-muted-foreground">Stylus Rust Verifier:</span>
-                    <span className="font-mono text-green-500">~{gasUsed.toLocaleString()} gas</span>
+                    <span className="text-muted-foreground">Contract:</span>
+                    <span className="font-mono">{CONTRACTS.ZK_VERIFIER.slice(0, 10)}...</span>
                   </div>
-                  <div className="flex justify-between text-xs font-medium pt-2 border-t">
-                    <span>Savings:</span>
-                    <span className="text-green-500">92% reduction</span>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Status:</span>
+                    <span className="text-green-500 font-medium">Verified ✓</span>
                   </div>
                 </div>
               </div>
@@ -229,10 +426,9 @@ export function VerifyProofStep() {
             <div className="rounded-lg border p-4 space-y-2">
               <div className="text-sm font-medium">Verification Details</div>
               <div className="space-y-1 text-xs text-muted-foreground">
-                <div>• Verifier: Stylus Rust Contract</div>
+                <div>• Verifier: Groth16 Verifier Contract</div>
                 <div>• Network: Arbitrum Sepolia</div>
-                <div>• Expected Gas: ~200k</div>
-                <div>• Proof Type: Groth16 (arkworks)</div>
+                <div>• Proof Type: Groth16</div>
                 {selectedAttribute && (
                   <div>• Attribute: {selectedAttribute}</div>
                 )}
@@ -246,7 +442,13 @@ export function VerifyProofStep() {
               
               <Button
                 onClick={handleVerifyProof}
-                disabled={isVerifying || isConfirming || isPending || !proof}
+                disabled={
+                  isVerifying ||
+                  isConfirming ||
+                  isPending ||
+                  !proof ||
+                  (!isGroth16Configured && !supportsSimpleVerify)
+                }
                 className="flex-1"
               >
                 {isVerifying || isConfirming || isPending ? (

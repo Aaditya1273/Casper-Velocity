@@ -2,13 +2,13 @@
   "network": "Arbitrum Sepolia",
   "chainId": 421614,
   "contracts": {
-    "ZKVerifier": "0xEa53E2fF08CD18fD31B188a72079aE9Ca34856e4",
-    "ComplianceRegistry": "0x464D37393C8D3991b493DBb57F5f3b8c31c7Fa60",
-    "MockBUIDL": "0x15Ef1E2E5899dBc374e5D7e147d57Fd032912eDC",
-    "StylusVerifier": "0x1111111111111111111111111111111111111111",
-    "PasskeyRegistry": "0xe047C063A0ed4ec577fa255De3456856e4455087"
+    "ZKVerifier": "0x68B54E13F3da4A3dF34Af657853769ea6D66b6d9",
+    "ComplianceRegistry": "0xD39184bd636D5f18604e696C149DdAF770023BEA",
+    "MockBUIDL": "0x444709c368e2DfeAD2B91C74f81D59Ca897120a4",
+    "PasskeyRegistry": "0x8eD61DE37E6246a1aFDaa7fD7bFd8DA2414E4a29",
+    "Groth16Verifier": "0x46dcF690A82BbbA1D1f6fDb67EC45a2Fa7A17404"
   },
   "deployer": "0x8bB9b052ad7ec275b46bfcDe425309557EFFAb07",
-  "timestamp": "2026-02-12T14:20:41.279Z",
-  "lastUpdated": "2026-02-14T03:47:00.056Z"
+  "timestamp": "2026-02-21T00:00:00.000Z",
+  "notes": "MockBUIDL redeployed with mint/burn functions for users"
 }

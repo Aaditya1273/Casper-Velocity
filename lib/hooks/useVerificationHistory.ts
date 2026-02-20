@@ -34,6 +34,10 @@ export function useVerificationHistory() {
       try {
         setLoading(true);
 
+        // Get current block and lookback range
+        const currentBlock = await publicClient.getBlockNumber();
+        const fromBlock = currentBlock > BigInt(1000) ? currentBlock - BigInt(1000) : BigInt(0);
+
         // Fetch ProofVerified events from ZKVerifier contract
         const logs = await publicClient.getLogs({
           address: CONTRACTS.ZK_VERIFIER,
@@ -41,7 +45,7 @@ export function useVerificationHistory() {
           args: {
             user: address,
           },
-          fromBlock: 'earliest',
+          fromBlock,
           toBlock: 'latest',
         });
 
@@ -49,9 +53,24 @@ export function useVerificationHistory() {
         const eventsWithTimestamps = await Promise.all(
           logs.map(async (log) => {
             const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
+            let attributeType = log.args.attributeType as string;
+
+            if (attributeType === "" || attributeType === "unknown") {
+              try {
+                const stored = localStorage.getItem("verificationAttributes");
+                const map = stored ? JSON.parse(stored) : {};
+                const mapped = map[log.transactionHash as string];
+                if (typeof mapped === "string" && mapped.length > 0) {
+                  attributeType = mapped;
+                }
+              } catch (storageError) {
+                console.warn("Failed to read verification attribute map", storageError);
+              }
+            }
+
             return {
               user: log.args.user as string,
-              attributeType: log.args.attributeType as string,
+              attributeType,
               proofHash: log.args.proofHash as string,
               gasUsed: log.args.gasUsed as bigint,
               timestamp: Number(block.timestamp),

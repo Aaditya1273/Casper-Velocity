@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Shield, Info, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
@@ -17,32 +18,66 @@ import {
   type ZKProof,
 } from "@/lib/zkproof";
 
-const attributeOptions = [
-  {
-    value: COMPLIANCE_ATTRIBUTES.CREDIT_SCORE,
-    label: "Credit Score Range",
-    description: "Prove credit score > 700 without revealing exact score",
+const ATTRIBUTE_CONFIGS = {
+  [COMPLIANCE_ATTRIBUTES.CREDIT_SCORE]: {
+    label: "Credit Score Threshold",
+    description: "Prove credit score ≥ threshold without revealing exact score",
+    privateLabel: "Credit Score (private)",
+    publicLabel: "Threshold (public)",
+    privateHelp: undefined,
+    publicHelp: undefined,
+    defaults: { creditScore: "750", threshold: "700" },
   },
-  {
-    value: COMPLIANCE_ATTRIBUTES.ACCREDITED_INVESTOR,
-    label: "Accredited Investor",
-    description: "Prove accredited investor status per SEC requirements",
+  [COMPLIANCE_ATTRIBUTES.ACCREDITED_INVESTOR]: {
+    label: "Accredited Investor Status",
+    description: "Prove accredited investor status with a public requirement",
+    privateLabel: "Accreditation Status (private)",
+    publicLabel: "Required (public)",
+    privateHelp: "Use 1 for true, 0 for false",
+    publicHelp: "Use 1 to require accredited status",
+    defaults: { creditScore: "1", threshold: "1" },
   },
-  {
-    value: COMPLIANCE_ATTRIBUTES.KYC_VERIFIED,
-    label: "KYC Verified",
-    description: "Prove KYC completion without revealing identity",
+  [COMPLIANCE_ATTRIBUTES.KYC_VERIFIED]: {
+    label: "KYC Verified Status",
+    description: "Prove KYC status with a public requirement",
+    privateLabel: "KYC Status (private)",
+    publicLabel: "Required (public)",
+    privateHelp: "Use 1 for true, 0 for false",
+    publicHelp: "Use 1 to require KYC",
+    defaults: { creditScore: "1", threshold: "1" },
   },
-  {
-    value: COMPLIANCE_ATTRIBUTES.US_PERSON,
+  [COMPLIANCE_ATTRIBUTES.US_PERSON]: {
     label: "US Person Status",
-    description: "Prove US person status for regulatory compliance",
+    description: "Prove US person status with a public requirement",
+    privateLabel: "US Person Status (private)",
+    publicLabel: "Required (public)",
+    privateHelp: "Use 1 for true, 0 for false",
+    publicHelp: "Use 1 to require US person",
+    defaults: { creditScore: "1", threshold: "1" },
   },
-];
+  [COMPLIANCE_ATTRIBUTES.AGE_VERIFICATION]: {
+    label: "Age Verification",
+    description: "Prove age ≥ minimum without revealing the exact age",
+    privateLabel: "Age (private)",
+    publicLabel: "Minimum Age (public)",
+    privateHelp: undefined,
+    publicHelp: undefined,
+    defaults: { creditScore: "21", threshold: "18" },
+  },
+} as const;
+
+const attributeOptions = Object.entries(ATTRIBUTE_CONFIGS).map(([value, config]) => ({
+  value,
+  label: config.label,
+  description: config.description,
+  enabled: true,
+}));
 
 export function GenerateProofStep() {
   const { nextStep, prevStep } = useOnboardingStore();
   const [selectedAttribute, setSelectedAttribute] = useState(COMPLIANCE_ATTRIBUTES.CREDIT_SCORE);
+  const [creditScore, setCreditScore] = useState(ATTRIBUTE_CONFIGS[COMPLIANCE_ATTRIBUTES.CREDIT_SCORE].defaults.creditScore);
+  const [threshold, setThreshold] = useState(ATTRIBUTE_CONFIGS[COMPLIANCE_ATTRIBUTES.CREDIT_SCORE].defaults.threshold);
   const [isGenerating, setIsGenerating] = useState(false);
   const [proofGenerated, setProofGenerated] = useState(false);
   const [proof, setProof] = useState<ZKProof | null>(null);
@@ -54,12 +89,22 @@ export function GenerateProofStep() {
     setError("");
     
     try {
-      // Generate ZK proof using snarkjs
+      const creditScoreValue = Number(creditScore);
+      const thresholdValue = Number(threshold);
+
+      if (!Number.isFinite(creditScoreValue) || !Number.isFinite(thresholdValue)) {
+        throw new Error("Please enter valid numeric values.");
+      }
+
+      if (creditScoreValue < 0 || thresholdValue < 0) {
+        throw new Error("Values must be positive.");
+      }
+
+      // Generate ZK proof using snarkjs (generic threshold circuit)
       const generatedProof = await generateZKProof({
         attributeType: selectedAttribute,
-        attributeValue: 750, // Example: credit score of 750
-        threshold: 700, // Proving score > 700
-        userSecret: crypto.randomUUID(), // Random user secret
+        creditScore: creditScoreValue,
+        threshold: thresholdValue,
       });
 
       // Verify proof locally before proceeding
@@ -79,6 +124,8 @@ export function GenerateProofStep() {
       // Store proof in session storage for next step
       sessionStorage.setItem("zkProof", JSON.stringify(generatedProof));
       sessionStorage.setItem("selectedAttribute", selectedAttribute);
+      sessionStorage.setItem("creditScore", creditScoreValue.toString());
+      sessionStorage.setItem("threshold", thresholdValue.toString());
     } catch (err: any) {
       console.error("Proof generation error:", err);
       setError(err.message || "Failed to generate proof. Please try again.");
@@ -111,14 +158,21 @@ export function GenerateProofStep() {
           <Label>Select Compliance Attribute</Label>
           <RadioGroup 
             value={selectedAttribute} 
-            onValueChange={setSelectedAttribute}
+            onValueChange={(value) => {
+              setSelectedAttribute(value);
+              const defaults = ATTRIBUTE_CONFIGS[value as keyof typeof ATTRIBUTE_CONFIGS]?.defaults;
+              if (defaults) {
+                setCreditScore(defaults.creditScore);
+                setThreshold(defaults.threshold);
+              }
+            }}
             disabled={proofGenerated}
           >
             {attributeOptions.map((option) => {
               const circuitInfo = getCircuitInfo(option.value);
               return (
                 <div key={option.value} className="flex items-start space-x-3 space-y-0">
-                  <RadioGroupItem value={option.value} id={option.value} />
+                  <RadioGroupItem value={option.value} id={option.value} disabled={!option.enabled} />
                   <div className="space-y-1 leading-none">
                     <Label htmlFor={option.value} className="font-medium cursor-pointer">
                       {option.label}
@@ -134,6 +188,47 @@ export function GenerateProofStep() {
               );
             })}
           </RadioGroup>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="creditScore">
+              {ATTRIBUTE_CONFIGS[selectedAttribute as keyof typeof ATTRIBUTE_CONFIGS]?.privateLabel}
+            </Label>
+            <Input
+              id="creditScore"
+              type="number"
+              min="0"
+              step="1"
+              value={creditScore}
+              onChange={(e) => setCreditScore(e.target.value)}
+              disabled={proofGenerated}
+            />
+            {ATTRIBUTE_CONFIGS[selectedAttribute as keyof typeof ATTRIBUTE_CONFIGS]?.privateHelp && (
+              <p className="text-xs text-muted-foreground">
+                {ATTRIBUTE_CONFIGS[selectedAttribute as keyof typeof ATTRIBUTE_CONFIGS]?.privateHelp}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="threshold">
+              {ATTRIBUTE_CONFIGS[selectedAttribute as keyof typeof ATTRIBUTE_CONFIGS]?.publicLabel}
+            </Label>
+            <Input
+              id="threshold"
+              type="number"
+              min="0"
+              step="1"
+              value={threshold}
+              onChange={(e) => setThreshold(e.target.value)}
+              disabled={proofGenerated}
+            />
+            {ATTRIBUTE_CONFIGS[selectedAttribute as keyof typeof ATTRIBUTE_CONFIGS]?.publicHelp && (
+              <p className="text-xs text-muted-foreground">
+                {ATTRIBUTE_CONFIGS[selectedAttribute as keyof typeof ATTRIBUTE_CONFIGS]?.publicHelp}
+              </p>
+            )}
+          </div>
         </div>
 
         {error && (
