@@ -11,6 +11,7 @@ import { useState, useEffect } from "react";
 import { registerPasskey, isPlatformAuthenticatorAvailable } from "@/lib/webauthn";
 import { useUserPasskeys, useRegisterPasskey, useRevokePasskey } from "@/lib/hooks/usePasskeyRegistry";
 import { toast } from "sonner";
+import { useWriteContract } from "wagmi";
 
 export function PasskeyManager() {
   const { address } = useAccount();
@@ -22,6 +23,7 @@ export function PasskeyManager() {
   const { passkeys, isLoading, refetch } = useUserPasskeys();
   const { registerPasskey: registerOnChain, isPending: isRegisterPending } = useRegisterPasskey();
   const { revokePasskey, isPending: isRevokePending } = useRevokePasskey();
+  const { writeContract } = useWriteContract();
 
   useEffect(() => {
     const checkSupport = async () => {
@@ -46,7 +48,7 @@ export function PasskeyManager() {
       setIsRegistering(true);
       
       // Register passkey with WebAuthn
-      const credential = await registerPasskey(address);
+      const credential = await registerPasskey(address, writeContract);
       
       // Register on-chain
       await registerOnChain(
