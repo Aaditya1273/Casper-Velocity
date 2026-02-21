@@ -75,7 +75,7 @@ const attributeOptions = Object.entries(ATTRIBUTE_CONFIGS).map(([value, config])
 
 export function GenerateProofStep() {
   const { nextStep, prevStep } = useOnboardingStore();
-  const [selectedAttribute, setSelectedAttribute] = useState(COMPLIANCE_ATTRIBUTES.CREDIT_SCORE);
+  const [selectedAttribute, setSelectedAttribute] = useState<string>(COMPLIANCE_ATTRIBUTES.CREDIT_SCORE);
   const [creditScore, setCreditScore] = useState(ATTRIBUTE_CONFIGS[COMPLIANCE_ATTRIBUTES.CREDIT_SCORE].defaults.creditScore);
   const [threshold, setThreshold] = useState(ATTRIBUTE_CONFIGS[COMPLIANCE_ATTRIBUTES.CREDIT_SCORE].defaults.threshold);
   const [isGenerating, setIsGenerating] = useState(false);
