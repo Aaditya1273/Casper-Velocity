@@ -16,7 +16,7 @@ export function ComplianceStats() {
   ).length;
   const complianceScore = verifiedAttributes.length > 0 ? 100 : 0;
   const avgGas = events.length > 0
-    ? Number(events.reduce((sum, e) => sum + e.gasUsed, 0n) / BigInt(events.length))
+    ? Number(events.reduce((sum, e) => sum + e.gasUsed, BigInt(0)) / BigInt(events.length))
     : 0;
 
   const stats = [
