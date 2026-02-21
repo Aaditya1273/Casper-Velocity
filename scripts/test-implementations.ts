@@ -13,9 +13,8 @@ async function testZKProof() {
     console.log('1. Generating ZK proof...');
     const proof = await generateZKProof({
       attributeType: 'credit_score',
-      attributeValue: 750,
+      creditScore: 750,
       threshold: 700,
-      userSecret: 'test-secret-123',
     });
 
     console.log('✅ Proof generated successfully!');
