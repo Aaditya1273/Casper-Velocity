@@ -11,7 +11,10 @@
     "format": "biome format --write",
     "check": "biome check --write",
     "typecheck": "tsc --noEmit",
-    "test:implementations": "node scripts/test-implementations.mjs"
+    "test:implementations": "node scripts/test-implementations.mjs",
+    "deploy": "vercel",
+    "deploy:prod": "vercel --prod",
+    "vercel:env": "vercel env pull"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
