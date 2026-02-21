@@ -16,10 +16,12 @@ import {
   isPlatformAuthenticatorAvailable,
   verifyPasskeyWithRIP7212,
 } from "@/lib/webauthn";
+import { useWriteContract } from "wagmi";
 
 export function PasskeyAuthStep() {
   const { nextStep } = useOnboardingStore();
   const { address, isConnected } = useAccount();
+  const { writeContract } = useWriteContract();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authSuccess, setAuthSuccess] = useState(false);
   const [error, setError] = useState<string>("");
@@ -61,7 +63,7 @@ export function PasskeyAuthStep() {
         authResponse = await authenticatePasskey(address);
       } else {
         // Register new passkey
-        await registerPasskey(address);
+        await registerPasskey(address, writeContract);
         authResponse = await authenticatePasskey(address);
       }
 
