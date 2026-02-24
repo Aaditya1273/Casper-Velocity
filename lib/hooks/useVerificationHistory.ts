@@ -5,7 +5,15 @@
 import { useAccount, usePublicClient } from 'wagmi';
 import { useEffect, useState } from 'react';
 import { CONTRACTS } from '@/lib/contracts';
-import { parseAbiItem } from 'viem';
+import { decodeEventLog, parseAbi, parseAbiItem, pad } from 'viem';
+
+const ZK_VERIFIER_ABI = parseAbi([
+  'event ProofVerified(address indexed user, string attributeType, bytes32 proofHash, uint256 gasUsed)',
+  'event ProofVerified(address indexed user, bool result, uint256 timestamp, uint256 gasUsed)',
+]);
+
+const STYLUS_EVENT_TOPIC = '0xff14866850fcba3f56f5227c442391448b2aa2af39bbf2b0ea071435f07b4c23';
+const SOLIDITY_EVENT_TOPIC = '0x142aa142a01bf97efeee299c6a83e0d42ce1319d41aefadc0c2f274429b53acc';
 
 export interface VerificationEvent {
   user: string;
@@ -36,44 +44,81 @@ export function useVerificationHistory() {
 
         // Get current block and lookback range
         const currentBlock = await publicClient.getBlockNumber();
-        const fromBlock = currentBlock > BigInt(1000) ? currentBlock - BigInt(1000) : BigInt(0);
+        const fromBlock = currentBlock > BigInt(1000000) ? currentBlock - BigInt(1000000) : BigInt(0);
 
-        // Fetch ProofVerified events from ZKVerifier contract
-        const logs = await publicClient.getLogs({
-          address: CONTRACTS.ZK_VERIFIER,
-          event: parseAbiItem('event ProofVerified(address indexed user, string attributeType, bytes32 proofHash, uint256 gasUsed)'),
-          args: {
-            user: address,
-          },
-          fromBlock,
-          toBlock: 'latest',
-        });
+        const VERIFIERS = [
+          CONTRACTS.ZK_VERIFIER,
+          '0x68B54E13F3da4A3dF34Af657853769ea6D66b6d9' as `0x${string}`, // Old Solidity Verifier
+        ];
+
+        const allLogs: any[] = [];
+        const logPromises = VERIFIERS.map(verifierAddress =>
+          publicClient.getLogs({
+            address: verifierAddress,
+            fromBlock,
+            toBlock: 'latest',
+          }).then(logs => {
+            const userTopic = pad(address as `0x${string}`).toLowerCase();
+            return logs.filter(log =>
+              log.topics[1]?.toLowerCase() === userTopic &&
+              (log.topics[0] === SOLIDITY_EVENT_TOPIC || log.topics[0] === STYLUS_EVENT_TOPIC)
+            );
+          }).catch(err => {
+            console.warn(`Failed to fetch history from ${verifierAddress}`, err);
+            return [];
+          })
+        );
+
+        const results = await Promise.all(logPromises);
+        results.forEach(filteredLogs => allLogs.push(...filteredLogs));
 
         // Get block timestamps for each event
         const eventsWithTimestamps = await Promise.all(
-          logs.map(async (log) => {
-            const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
-            let attributeType = log.args.attributeType as string;
+          allLogs.map(async (log) => {
+            let attributeType = 'unknown';
+            let proofHash = '0x';
+            let gasUsed = 0n;
+            let timestamp = 0;
 
-            if (attributeType === "" || attributeType === "unknown") {
+            if (log.topics[0] === SOLIDITY_EVENT_TOPIC) {
               try {
+                const decoded = decodeEventLog({
+                  abi: ZK_VERIFIER_ABI,
+                  data: log.data,
+                  topics: log.topics,
+                }) as any;
+                attributeType = decoded.args.attributeType;
+                proofHash = decoded.args.proofHash;
+                gasUsed = decoded.args.gasUsed;
+              } catch (e) { }
+            } else {
+              try {
+                const decoded = decodeEventLog({
+                  abi: ZK_VERIFIER_ABI,
+                  data: log.data,
+                  topics: log.topics,
+                }) as any;
+                timestamp = Number(decoded.args.timestamp);
+                gasUsed = decoded.args.gasUsed;
+
+                const txHash = log.transactionHash;
                 const stored = localStorage.getItem("verificationAttributes");
                 const map = stored ? JSON.parse(stored) : {};
-                const mapped = map[log.transactionHash as string];
-                if (typeof mapped === "string" && mapped.length > 0) {
-                  attributeType = mapped;
-                }
-              } catch (storageError) {
-                console.warn("Failed to read verification attribute map", storageError);
-              }
+                attributeType = map[txHash] || "kyc_verified";
+              } catch (e) { }
+            }
+
+            if (timestamp === 0) {
+              const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
+              timestamp = Number(block.timestamp);
             }
 
             return {
-              user: log.args.user as string,
+              user: address,
               attributeType,
-              proofHash: log.args.proofHash as string,
-              gasUsed: log.args.gasUsed as bigint,
-              timestamp: Number(block.timestamp),
+              proofHash,
+              gasUsed,
+              timestamp,
               txHash: log.transactionHash,
               blockNumber: log.blockNumber,
             };

@@ -1,10 +1,10 @@
 "use client";
 
-import { useAccount, useReadContract, useBlockNumber } from "wagmi";
+import { useAccount, useReadContract, useBlockNumber, usePublicClient } from "wagmi";
 import { CONTRACTS } from "@/lib/contracts";
 import { formatUnits } from "viem";
 import { useEffect, useState } from "react";
-import { createPublicClient, http, parseAbiItem } from "viem";
+import { parseAbiItem } from "viem";
 import { ARBITRUM_SEPOLIA } from "@/lib/contracts";
 
 const MOCK_BUIDL_ABI = [
@@ -42,6 +42,7 @@ export function usePortfolioData() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoadingTxs, setIsLoadingTxs] = useState(false);
   const { data: blockNumber } = useBlockNumber({ watch: true });
+  const publicClient = usePublicClient();
 
   const { data: balance, isLoading: isLoadingBalance, refetch: refetchBalance } = useReadContract({
     address: CONTRACTS.MOCK_BUIDL,
@@ -60,55 +61,42 @@ export function usePortfolioData() {
     }
 
     const fetchTransactions = async () => {
+      if (!publicClient) return;
       setIsLoadingTxs(true);
       try {
-        const client = createPublicClient({
-          chain: ARBITRUM_SEPOLIA,
-          transport: http(),
-        });
-
-        const currentBlock = await client.getBlockNumber();
+        const currentBlock = await publicClient.getBlockNumber();
         // Use smaller block range for Alchemy free tier (max 10 blocks per request)
         // We'll fetch in chunks to stay within limits
-        const CHUNK_SIZE = BigInt(10); // Alchemy free tier limit
-        const MAX_LOOKBACK = BigInt(1000); // Look back 1000 blocks max
-
+        const MAX_LOOKBACK = BigInt(100000); // Look back 100,000 blocks max
         const fromBlock = currentBlock > MAX_LOOKBACK ? currentBlock - MAX_LOOKBACK : BigInt(0);
-
-        // Fetch in chunks to respect Alchemy limits
-        const allSentLogs = [];
-        const allReceivedLogs = [];
+        const CHUNK_SIZE = BigInt(50000); // Larger chunks
+        const chunkPromises: Promise<any[]>[] = [];
 
         for (let start = fromBlock; start < currentBlock; start += CHUNK_SIZE) {
           const end = start + CHUNK_SIZE > currentBlock ? currentBlock : start + CHUNK_SIZE;
 
-          try {
-            const [sentLogs, receivedLogs] = await Promise.all([
-              client.getLogs({
+          chunkPromises.push(
+            Promise.all([
+              publicClient.getLogs({
                 address: CONTRACTS.MOCK_BUIDL,
                 event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
                 args: { from: address },
                 fromBlock: start,
                 toBlock: end,
               }).catch(() => []),
-              client.getLogs({
+              publicClient.getLogs({
                 address: CONTRACTS.MOCK_BUIDL,
                 event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
                 args: { to: address },
                 fromBlock: start,
                 toBlock: end,
               }).catch(() => []),
-            ]);
-
-            allSentLogs.push(...sentLogs);
-            allReceivedLogs.push(...receivedLogs);
-          } catch (err) {
-            // Skip failed chunks
-            console.warn(`Failed to fetch logs for blocks ${start}-${end}:`, err);
-          }
+            ]).then(([sent, received]) => [...sent, ...received])
+          );
         }
 
-        const allLogs = [...allSentLogs, ...allReceivedLogs];
+        const results = await Promise.all(chunkPromises);
+        const allLogs = results.flat();
 
         // Deduplicate by transaction hash
         const uniqueLogs = Array.from(
@@ -121,7 +109,7 @@ export function usePortfolioData() {
         // Fetch block timestamps for all transactions
         const txsWithDetails = await Promise.all(
           uniqueLogs.slice(0, 20).map(async (log) => {
-            const block = await client.getBlock({ blockNumber: log.blockNumber });
+            const block = await publicClient.getBlock({ blockNumber: log.blockNumber });
             const from = log.args.from as string;
             const to = log.args.to as string;
             const value = log.args.value as bigint;

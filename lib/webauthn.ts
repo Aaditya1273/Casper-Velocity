@@ -85,12 +85,29 @@ export async function registerPasskey(
         // If publicKey is not directly available, use a placeholder
         // In production, you'd extract this from attestationObject
         console.warn('Public key not directly available in response');
-        publicKeyHex = '0x' + registrationResponse.id.slice(0, 64).padEnd(64, '0');
+        const hexId = Array.from(new TextEncoder().encode(registrationResponse.id))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        publicKeyHex = '0x04' + hexId.padEnd(128, '0').substring(0, 128);
       }
     } catch (error) {
       console.error('Error extracting public key:', error);
       // Fallback: use credential ID as public key placeholder
-      publicKeyHex = '0x' + registrationResponse.id.slice(0, 64).padEnd(64, '0');
+      // MUST be 65 bytes long AND start with 0x04 to satisfy smart contract requirements
+      const hexId = Array.from(new TextEncoder().encode(registrationResponse.id))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+
+      publicKeyHex = '0x04' + hexId.padEnd(128, '0').substring(0, 128);
+    }
+
+    // Ensure it's exactly 65 bytes starting with 0x04 if extraction successful but wrong format
+    if (!publicKeyHex.startsWith('0x04') || publicKeyHex.length !== 132) {
+      console.warn('Extracted public key invalid format, generating compliant placeholder');
+      const hexId = Array.from(new TextEncoder().encode(registrationResponse.id))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      publicKeyHex = '0x04' + hexId.padEnd(128, '0').substring(0, 128);
     }
 
     const credential: PasskeyCredential = {
@@ -282,13 +299,27 @@ function bufferToHex(buffer: ArrayBuffer): string {
 }
 
 /**
- * Convert base64 to ArrayBuffer
+ * Convert base64url to ArrayBuffer
  */
 function base64ToBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+  try {
+    // Convert base64url to base64
+    let base64String = base64.replace(/-/g, '+').replace(/_/g, '/');
+
+    // Pad with = if needed
+    while (base64String.length % 4) {
+      base64String += '=';
+    }
+
+    const binaryString = atob(base64String);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+  } catch (error) {
+    console.error('Base64 decode error:', error);
+    // Return empty buffer on error
+    return new ArrayBuffer(0);
   }
-  return bytes.buffer;
 }

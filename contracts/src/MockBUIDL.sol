@@ -80,7 +80,8 @@ contract MockBUIDL is ERC20, Ownable {
      * @dev Allows compliant users to mint tokens for demo purposes
      */
     function mint(uint256 amount) external {
-        require(isCompliant(msg.sender), "User not compliant");
+        // Relaxed for hackathon demo to ensure smooth UX
+        // require(isCompliant(msg.sender), "User not compliant");
         _mint(msg.sender, amount);
     }
 

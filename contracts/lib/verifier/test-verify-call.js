@@ -29,7 +29,8 @@ async function main() {
   console.log('👤 Wallet:', wallet.address);
   console.log('');
   
-  // Check initialization
+  // Check initializationPRIVATE_KEY
+  Still reverting! This is very strange. Let me try calling with a send instead of call
   console.log('1️⃣ Checking initialization...');
   const isInit = await contract.isInitialized();
   console.log('   ✅ Initialized:', isInit);

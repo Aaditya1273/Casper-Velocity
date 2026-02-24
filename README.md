@@ -370,8 +370,8 @@ flowchart LR
 | **🛡️ ZK Verifier Wrapper** | [`0xF2eAdA47EF443Dd5020731c01b1fEa5C2E8521Fd`](https://sepolia.arbiscan.io/address/0xF2eAdA47EF443Dd5020731c01b1fEa5C2E8521Fd) | Main verification interface | ✅ Live |
 | **🦀 Stylus Rust Verifier** | [`0x7bca267bffc69fff991917f72d0c6b4ce9117343`](https://sepolia.arbiscan.io/address/0x7bca267bffc69fff991917f72d0c6b4ce9117343) | WASM ZK verification | ✅ Live |
 | **📋 Compliance Registry** | [`0x464D37393C8D3991b493DBb57F5f3b8c31c7Fa60`](https://sepolia.arbiscan.io/address/0x464D37393C8D3991b493DBb57F5f3b8c31c7Fa60) | Attribute storage | ✅ Live |
-| **🔐 Passkey Registry** | [`0xe047C063A0ed4ec577fa255De3456856e4455087`](https://sepolia.arbiscan.io/address/0xe047C063A0ed4ec577fa255De3456856e4455087) | Biometric auth | ✅ Live |
-| **💰 Mock BUIDL Token** | [`0x444709c368e2DfeAD2B91C74f81D59Ca897120a4`](https://sepolia.arbiscan.io/address/0x444709c368e2DfeAD2B91C74f81D59Ca897120a4) | Demo RWA | ✅ Live |
+| **🔐 Passkey Registry** | [`0xcc00fc01c0c4749889dc6886a2ea384bba962638`](https://sepolia.arbiscan.io/address/0xcc00fc01c0c4749889dc6886a2ea384bba962638) | Biometric auth | ✅ Live |
+| **💰 Mock BUIDL Token** | [`0xa835b811a33751e10e8fce4d8091ae55292ce518`](https://sepolia.arbiscan.io/address/0xa835b811a33751e10e8fce4d8091ae55292ce518) | Demo RWA | ✅ Live |
 
 ### Example Transactions
 

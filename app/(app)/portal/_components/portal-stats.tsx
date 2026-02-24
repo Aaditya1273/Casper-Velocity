@@ -85,7 +85,7 @@ export function PortalStats() {
       {stats.map((stat, index) => (
         <Card
           key={stat.title}
-          className="transition-all duration-500 hover:scale-[1.03] hover:shadow-2xl hover:border-primary/60 group relative overflow-hidden border-2"
+          className="glass-card transition-all duration-500 hover:scale-[1.05] hover:shadow-[0_0_50px_-12px_rgba(var(--primary),0.2)] hover:border-primary/60 group relative overflow-hidden border-2"
           style={{
             animationDelay: `${index * 100}ms`,
           }}
@@ -96,18 +96,18 @@ export function PortalStats() {
           {/* Shimmer effect */}
           <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3 relative z-10">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">{stat.title}</CardTitle>
-            <div className={`p-2.5 rounded-xl ${stat.color.replace('text-', 'bg-')}/10 transition-all duration-300 group-hover:scale-110 group-hover:rotate-6 shadow-lg`}>
-              <stat.icon className={`size-5 ${stat.color} transition-all duration-300`} />
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 relative z-10">
+            <CardTitle className="text-xs font-black uppercase tracking-[0.15em] text-muted-foreground">{stat.title}</CardTitle>
+            <div className={`p-3 rounded-2xl ${stat.color.replace('text-', 'bg-')}/10 transition-all duration-500 group-hover:scale-110 group-hover:rotate-12 shadow-xl border border-white/5`}>
+              <stat.icon className={`size-6 ${stat.color} transition-all duration-300`} />
             </div>
           </CardHeader>
           <CardContent className="relative z-10">
-            <div className="text-3xl font-bold transition-all duration-300 group-hover:scale-105 bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
+            <div className="text-4xl font-black tracking-tighter transition-all duration-500 group-hover:scale-105 bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent">
               {stat.value}
             </div>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-2 font-medium">
-              <span className={`size-2 rounded-full ${stat.color.replace('text-', 'bg-')} animate-pulse shadow-lg`} />
+            <p className="text-xs text-muted-foreground mt-3 flex items-center gap-2 font-bold uppercase tracking-wider">
+              <span className={`size-2.5 rounded-full ${stat.color.replace('text-', 'bg-')} animate-pulse shadow-[0_0_10px_currentColor]`} />
               {stat.change}
             </p>
           </CardContent>

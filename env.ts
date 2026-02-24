@@ -9,6 +9,9 @@ export const env = createEnv({
     NEXT_PUBLIC_ALCHEMY_API_KEY: z.string().optional(),
     NEXT_PUBLIC_ZK_VERIFIER: z.string().optional(),
     NEXT_PUBLIC_GROTH16_VERIFIER: z.string().optional(),
+    NEXT_PUBLIC_COMPLIANCE_REGISTRY: z.string().optional(),
+    NEXT_PUBLIC_MOCK_BUIDL: z.string().optional(),
+    NEXT_PUBLIC_PASSKEY_REGISTRY: z.string().optional(),
   },
   runtimeEnv: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
@@ -17,5 +20,8 @@ export const env = createEnv({
     NEXT_PUBLIC_ALCHEMY_API_KEY: process.env.NEXT_PUBLIC_ALCHEMY_API_KEY,
     NEXT_PUBLIC_ZK_VERIFIER: process.env.NEXT_PUBLIC_ZK_VERIFIER,
     NEXT_PUBLIC_GROTH16_VERIFIER: process.env.NEXT_PUBLIC_GROTH16_VERIFIER,
+    NEXT_PUBLIC_COMPLIANCE_REGISTRY: process.env.NEXT_PUBLIC_COMPLIANCE_REGISTRY,
+    NEXT_PUBLIC_MOCK_BUIDL: process.env.NEXT_PUBLIC_MOCK_BUIDL,
+    NEXT_PUBLIC_PASSKEY_REGISTRY: process.env.NEXT_PUBLIC_PASSKEY_REGISTRY,
   },
 });

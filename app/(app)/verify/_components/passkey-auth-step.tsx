@@ -97,7 +97,7 @@ export function PasskeyAuthStep() {
           Biometric Authentication
         </CardTitle>
         <CardDescription>
-          Authenticate using FaceID, TouchID, or Windows Hello via RIP-7212 precompile
+          Authenticate using FaceID, TouchID, or Windows Hello via RIP-7212 precompile (biometric authentication - no password needed)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -106,7 +106,14 @@ export function PasskeyAuthStep() {
           <AlertDescription>
             ArbShield uses RIP-7212 secp256r1 precompile for biometric passkey authentication.
             This provides 99% gas reduction compared to traditional signature verification.
-            <div className="mt-2 space-y-1">
+            <div className="mt-3 space-y-2">
+              <div className="text-xs font-semibold text-primary">How it works:</div>
+              <div className="text-xs">
+                • <span className="font-mono">Step 1:</span> Use your device's biometric sensor (FaceID/TouchID/Windows Hello)
+              </div>
+              <div className="text-xs">
+                • <span className="font-mono">Step 2:</span> No password needed - just your fingerprint or face
+              </div>
               <div className="text-xs">
                 • <span className="font-mono">Gas Cost:</span> ~980 gas (vs 100k+ traditional)
               </div>
@@ -130,6 +137,17 @@ export function PasskeyAuthStep() {
             <AlertCircle className="size-4" />
             <AlertDescription>
               Your browser doesn't support WebAuthn. Please use a modern browser like Chrome, Safari, or Edge.
+              For development, you can use the "Skip" button below.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {!platformAuthAvailable && webAuthnSupported && (
+          <Alert>
+            <Info className="size-4" />
+            <AlertDescription>
+              Platform authenticator not detected. Make sure your device has FaceID, TouchID, or Windows Hello enabled.
+              You can still proceed using the skip button for testing.
             </AlertDescription>
           </Alert>
         )}
@@ -172,36 +190,45 @@ export function PasskeyAuthStep() {
               </Alert>
             ) : (
               <div className="space-y-2">
-                <Button
-                  onClick={handlePasskeyAuth}
-                  disabled={isAuthenticating || !webAuthnSupported}
-                  className="w-full"
-                  size="lg"
-                >
-                  {isAuthenticating ? (
-                    <>
-                      <Loader2 className="mr-2 size-4 animate-spin" />
-                      Authenticating...
-                    </>
-                  ) : (
-                    <>
-                      <Fingerprint className="mr-2 size-4" />
-                      {passkeyExists ? "Authenticate with Passkey" : "Register & Authenticate"}
-                    </>
-                  )}
-                </Button>
+                {webAuthnSupported && platformAuthAvailable && (
+                  <Button
+                    onClick={handlePasskeyAuth}
+                    disabled={isAuthenticating}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isAuthenticating ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" />
+                        Authenticating with biometrics...
+                      </>
+                    ) : (
+                      <>
+                        <Fingerprint className="mr-2 size-4" />
+                        {passkeyExists ? "Authenticate with Biometrics" : "Register Biometric Passkey"}
+                      </>
+                    )}
+                  </Button>
+                )}
                 
-                {/* Development Skip Button - WebAuthn requires HTTPS */}
+                {/* Development Skip Button - WebAuthn requires HTTPS or localhost */}
                 <Button
                   onClick={() => {
                     setAuthSuccess(true);
                     setTimeout(() => nextStep(), 500);
                   }}
-                  variant="outline"
-                  className="w-full text-xs"
-                  size="sm"
+                  variant={webAuthnSupported && platformAuthAvailable ? "outline" : "default"}
+                  className="w-full"
+                  size={webAuthnSupported && platformAuthAvailable ? "sm" : "lg"}
                 >
-                  Skip Passkey Auth (Dev Mode - WebAuthn requires HTTPS)
+                  {webAuthnSupported && platformAuthAvailable ? (
+                    <span className="text-xs">Skip Biometric Auth (Testing)</span>
+                  ) : (
+                    <>
+                      <Fingerprint className="mr-2 size-4" />
+                      Continue Without Biometrics (Dev Mode)
+                    </>
+                  )}
                 </Button>
               </div>
             )}

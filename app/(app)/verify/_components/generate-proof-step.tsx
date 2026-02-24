@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Shield, Info, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Shield, Info, Loader2, CheckCircle2, AlertCircle, AlertTriangle } from "lucide-react";
 import { useOnboardingStore } from "@/lib/stores/onboarding-store";
 import { COMPLIANCE_ATTRIBUTES } from "@/lib/contracts";
+import { useComplianceData } from "@/lib/hooks/useComplianceData";
 import {
   generateZKProof,
   verifyZKProofLocally,
@@ -75,6 +76,7 @@ const attributeOptions = Object.entries(ATTRIBUTE_CONFIGS).map(([value, config])
 
 export function GenerateProofStep() {
   const { nextStep, prevStep } = useOnboardingStore();
+  const { verifiedAttributes, loading: loadingCompliance } = useComplianceData();
   const [selectedAttribute, setSelectedAttribute] = useState<string>(COMPLIANCE_ATTRIBUTES.CREDIT_SCORE);
   const [creditScore, setCreditScore] = useState<string>(ATTRIBUTE_CONFIGS[COMPLIANCE_ATTRIBUTES.CREDIT_SCORE].defaults.creditScore);
   const [threshold, setThreshold] = useState<string>(ATTRIBUTE_CONFIGS[COMPLIANCE_ATTRIBUTES.CREDIT_SCORE].defaults.threshold);
@@ -83,6 +85,11 @@ export function GenerateProofStep() {
   const [proof, setProof] = useState<ZKProof | null>(null);
   const [error, setError] = useState<string>("");
   const [estimatedGas, setEstimatedGas] = useState<number>(0);
+
+  // Check if selected attribute is already verified
+  const isAlreadyVerified = verifiedAttributes.some(
+    (attr) => attr.attributeType === selectedAttribute
+  );
 
   const handleGenerateProof = async () => {
     setIsGenerating(true);
@@ -153,6 +160,17 @@ export function GenerateProofStep() {
             The proof is generated locally using snarkjs and only the verification happens on-chain.
           </AlertDescription>
         </Alert>
+
+        {isAlreadyVerified && !loadingCompliance && (
+          <Alert className="border-yellow-500/50 bg-yellow-500/10">
+            <AlertTriangle className="size-4 text-yellow-500" />
+            <AlertDescription className="text-yellow-500">
+              <strong>Already Verified:</strong> You have already verified this attribute ({selectedAttribute.replace(/_/g, ' ')}). 
+              You can verify it again to update your proof, but it will create a duplicate entry in the verification history.
+              Consider selecting a different attribute instead.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="space-y-4">
           <Label>Select Compliance Attribute</Label>

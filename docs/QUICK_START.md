@@ -42,9 +42,9 @@ npm run dev
 
 | Contract | Address |
 |----------|---------|
-| MockBUIDL (NEW!) | `0x444709c368e2DfeAD2B91C74f81D59Ca897120a4` |
-| ZKVerifier | `0x68B54E13F3da4A3dF34Af657853769ea6D66b6d9` |
-| ComplianceRegistry | `0xD39184bd636D5f18604e696C149DdAF770023BEA` |
+| MockBUIDL | `0xa835b811a33751e10e8fce4d8091ae55292ce518` |
+| ZKVerifier | `0xF2eAdA47EF443Dd5020731c01b1fEa5C2E8521Fd` |
+| ComplianceRegistry | `0x464D37393C8D3991b493DBb57F5f3b8c31c7Fa60` |
 
 **Network:** Arbitrum Sepolia (421614)
 

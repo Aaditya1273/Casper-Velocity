@@ -12,7 +12,7 @@ import { CONTRACTS } from "@/lib/contracts";
 import { encodeFunctionData, parseAbi } from "viem";
 
 export function VerifyProofStep() {
-  const { prevStep, reset } = useOnboardingStore();
+  const { currentStep, setCurrentStep, prevStep, reset } = useOnboardingStore();
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const [isVerifying, setIsVerifying] = useState(false);
@@ -40,7 +40,7 @@ export function VerifyProofStep() {
     // Load proof from session storage
     const storedProof = sessionStorage.getItem("zkProof");
     const storedAttribute = sessionStorage.getItem("selectedAttribute");
-    
+
     if (storedProof && storedAttribute) {
       setProof(JSON.parse(storedProof));
       setSelectedAttribute(storedAttribute);
@@ -154,13 +154,13 @@ export function VerifyProofStep() {
 
     setIsVerifying(true);
     setError("");
-    
+
     try {
       console.log("Submitting to Solidity wrapper:", {
         contract: CONTRACTS.ZK_VERIFIER,
         attributeType: selectedAttribute,
       });
-      
+
       if (!walletClient) {
         throw new Error("Wallet client not available. Please reconnect your wallet.");
       }
@@ -252,8 +252,18 @@ export function VerifyProofStep() {
   };
 
   const handleViewDashboard = () => {
+    // Clear session storage
+    sessionStorage.removeItem("zkProof");
+    sessionStorage.removeItem("selectedAttribute");
+
+    // Reset the onboarding flow
     reset();
-    window.location.href = "/compliance";
+
+    // Add a small delay to ensure transaction is indexed
+    setTimeout(() => {
+      // Force a full page reload to refresh all data
+      window.location.href = "/portal";
+    }, 2000); // 2 second delay to ensure blockchain indexing
   };
 
   return (
@@ -351,7 +361,16 @@ export function VerifyProofStep() {
             <Alert className="border-green-500/50 bg-green-500/10">
               <CheckCircle2 className="size-4 text-green-500" />
               <AlertDescription className="text-green-500">
-                Proof verified successfully on-chain!
+                <div className="space-y-2">
+                  <div className="font-bold">Proof verified successfully on-chain!</div>
+                  <div className="text-sm">
+                    Your verification has been recorded on Arbitrum Sepolia.
+                    The blockchain may take a few seconds to index the transaction.
+                  </div>
+                  <div className="text-xs mt-2 p-2 bg-green-500/20 rounded border border-green-500/30">
+                    💡 Tip: If you don't see your verification immediately, wait 10-15 seconds and refresh the page.
+                  </div>
+                </div>
               </AlertDescription>
             </Alert>
 
@@ -417,9 +436,28 @@ export function VerifyProofStep() {
               </div>
             </div>
 
-            <Button onClick={handleViewDashboard} className="w-full" size="lg">
-              View Compliance Dashboard
-            </Button>
+            <div className="flex gap-3">
+              <Button
+                onClick={handleViewDashboard}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white font-black py-6 rounded-xl shadow-lg transition-all duration-300"
+                size="lg"
+              >
+                Open BUIDL Portal
+              </Button>
+              <Button
+                onClick={() => {
+                  // Reset to step 2 to allow verifying another attribute
+                  sessionStorage.removeItem("zkProof");
+                  sessionStorage.removeItem("selectedAttribute");
+                  setCurrentStep(2);
+                }}
+                variant="outline"
+                className="flex-1 font-bold py-6 rounded-xl border-2"
+                size="lg"
+              >
+                Update Proofs
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">
@@ -439,7 +477,7 @@ export function VerifyProofStep() {
               <Button onClick={prevStep} variant="outline" className="flex-1" disabled={isVerifying || isConfirming}>
                 Back
               </Button>
-              
+
               <Button
                 onClick={handleVerifyProof}
                 disabled={
